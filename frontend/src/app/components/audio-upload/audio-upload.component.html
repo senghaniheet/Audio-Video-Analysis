@@ -1,0 +1,165 @@
+<div class="container">
+  <div class="header">
+    <h1>Voice Transcription & AI Analysis</h1>
+    <p class="subtitle">Upload or record audio to get transcription and AI-powered insights</p>
+  </div>
+
+  <div class="upload-section">
+    <div class="file-input-wrapper">
+      <input 
+        type="file" 
+        id="audioFile" 
+        (change)="onFileSelected($event)" 
+        accept="audio/*" 
+        [disabled]="isLoading"
+      />
+      <label for="audioFile" class="file-label">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <span>{{ selectedFile ? selectedFile.name : 'Choose Audio File' }}</span>
+      </label>
+    </div>
+
+    <div class="button-group">
+      <button 
+        class="btn btn-primary" 
+        (click)="upload()" 
+        [disabled]="!selectedFile || isLoading"
+      >
+        <span *ngIf="!isLoading">Transcribe & Analyze</span>
+        <span *ngIf="isLoading">
+          <span class="spinner"></span>
+          Processing...
+        </span>
+      </button>
+      
+      <button 
+        class="btn btn-secondary" 
+        (click)="reset()" 
+        [disabled]="isLoading"
+      >
+        Reset
+      </button>
+    </div>
+  </div>
+
+  <div *ngIf="error" class="error-message">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="8" x2="12" y2="12"></line>
+      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+    <span>{{ error }}</span>
+  </div>
+
+  <div *ngIf="result && !error" class="results-section">
+    <div class="result-card">
+      <div class="card-header">
+        <h2>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 11l3 3L22 4"></path>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+          </svg>
+          Transcript
+        </h2>
+      </div>
+      <div class="card-content">
+        <p class="transcript-text">{{ result.transcript }}</p>
+      </div>
+    </div>
+
+    <div class="result-card">
+      <div class="card-header">
+        <h2>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          Summary
+        </h2>
+      </div>
+      <div class="card-content">
+        <p>{{ result.summary }}</p>
+      </div>
+    </div>
+
+    <div class="result-card">
+      <div class="card-header">
+        <h2>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+          </svg>
+          Sentiment
+        </h2>
+      </div>
+      <div class="card-content">
+        <span class="sentiment-badge" [class.positive]="result.sentiment === 'Positive'" 
+              [class.neutral]="result.sentiment === 'Neutral'" 
+              [class.negative]="result.sentiment === 'Negative'">
+          {{ result.sentiment }}
+        </span>
+      </div>
+    </div>
+
+    <div class="result-card">
+      <div class="card-header">
+        <h2>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M7 7h.01"></path>
+            <path d="M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 0 1 0 2.828l-7 7a2 2 0 0 1-2.828 0l-7-7A1.994 1.994 0 0 1 3 12V7a4 4 0 0 1 4-4z"></path>
+          </svg>
+          Keywords
+        </h2>
+      </div>
+      <div class="card-content">
+        <div class="tags-container">
+          <span class="tag" *ngFor="let keyword of result.keywords">{{ keyword }}</span>
+          <span *ngIf="result.keywords.length === 0" class="empty-state">No keywords identified</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="result-card">
+      <div class="card-header">
+        <h2>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          Issues
+        </h2>
+      </div>
+      <div class="card-content">
+        <ul class="list" *ngIf="result.issues.length > 0">
+          <li *ngFor="let issue of result.issues">{{ issue }}</li>
+        </ul>
+        <p *ngIf="result.issues.length === 0" class="empty-state">No issues identified</p>
+      </div>
+    </div>
+
+    <div class="result-card">
+      <div class="card-header">
+        <h2>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          Action Items
+        </h2>
+      </div>
+      <div class="card-content">
+        <ul class="list" *ngIf="result.actionItems.length > 0">
+          <li *ngFor="let item of result.actionItems">{{ item }}</li>
+        </ul>
+        <p *ngIf="result.actionItems.length === 0" class="empty-state">No action items identified</p>
+      </div>
+    </div>
+  </div>
+</div>
+
