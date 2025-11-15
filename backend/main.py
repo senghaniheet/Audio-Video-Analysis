@@ -6,6 +6,7 @@ import uvicorn
 import tempfile
 import os
 import uuid
+from datetime import datetime, timedelta
 from services.whisper_service import WhisperService
 from services.mcp_server import MCPServer
 
@@ -154,7 +155,11 @@ async def process_audio(file: UploadFile = File(...)):
             "topic": "",
             "intent": "",
             "status_found": False,
-            "order_status": None,
+            "order_status": {
+                "status": "",
+                "delivery_date": "",
+                "last_update": ""
+            },
             "response_text": "",
             "response_voice_text": "",
             "audio_url": None
