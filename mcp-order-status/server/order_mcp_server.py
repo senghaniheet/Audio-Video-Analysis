@@ -48,21 +48,21 @@ class OrderMCPServer:
         return None
     
     def extract_order_id(self, text: str) -> Optional[str]:
-        """Extract order ID (AMZxxxxx pattern) from text"""
+        """Extract order ID (AMZxxxxx pattern) from text - prioritize explicit 'order ID' mentions"""
         
-        # Pattern 1: "order ID is AMZ12345" or "order AMZ12345"
-        pattern1 = r'(?:order\s*(?:id|number|ID|Number)[\s:]*)?([A-Z]{2,4}[\s-]?\d{4,6})'
+        # Pattern 1: "order ID is MZ12345" - Most specific, check first
+        pattern1 = r'(?:order\s*(?:id|ID|number|Number)[\s:]*is[\s:]+)([A-Z]{1,4}[\s-]?\d{3,6})'
         match = re.search(pattern1, text, re.IGNORECASE)
         if match:
             order_id = match.group(1).strip().upper().replace(" ", "").replace("-", "")
-            if len(order_id) >= 5:  # At least 5 chars (e.g., AMZ12)
+            if len(order_id) >= 5:  # At least 5 chars (e.g., MZ123)
                 return order_id
         
-        # Pattern 2: Standalone AMZ12345 or MZ12345
-        pattern2 = r'\b([A-Z]{2,4}\d{4,6})\b'
+        # Pattern 2: "order ID MZ12345" or "order ID: MZ12345"
+        pattern2 = r'(?:order\s*(?:id|ID|number|Number)[\s:]+)([A-Z]{1,4}[\s-]?\d{3,6})'
         match = re.search(pattern2, text, re.IGNORECASE)
         if match:
-            order_id = match.group(1).strip().upper()
+            order_id = match.group(1).strip().upper().replace(" ", "").replace("-", "")
             if len(order_id) >= 5:
                 return order_id
         
@@ -74,78 +74,107 @@ class OrderMCPServer:
             if len(order_id) >= 5:
                 return order_id
         
+        # Pattern 4: Standalone AMZ12345 or MZ12345 (but not part of mobile number)
+        # Make sure it's not immediately after digits (to avoid matching parts of phone numbers)
+        pattern4 = r'(?<!\d)([A-Z]{2,4}\d{4,6})(?!\d)'
+        matches = re.finditer(pattern4, text, re.IGNORECASE)
+        for match in matches:
+            order_id = match.group(1).strip().upper()
+            # Make sure it's not part of a longer number sequence
+            start_pos = match.start()
+            end_pos = match.end()
+            # Check if surrounded by non-digit characters or word boundaries
+            if (start_pos == 0 or not text[start_pos-1].isdigit()) and \
+               (end_pos >= len(text) or not text[end_pos].isdigit()):
+                if len(order_id) >= 5:
+                    return order_id
+        
         return None
     
-    def orderStatusChecker(self, text: str) -> Dict[str, Any]:
+    def process(self, text: str) -> Dict[str, Any]:
         """
-        MCP Tool: Check order status from text
+        Process transcription text: Extract mobile number and order ID, then lookup in Excel
         
         Args:
             text: Input text (transcribed audio)
             
         Returns:
-            JSON response with match status and order details
+            Dictionary with extracted data and order status (backend format)
         """
+        
+        print(f"[INFO] Processing transcription: {text[:100]}...")
         
         # Extract mobile number and order ID
         mobile_number = self.extract_mobile_number(text)
         order_id = self.extract_order_id(text)
         
-        # If both not found, return natural AI response
+        print(f"[INFO] Extracted Mobile: {mobile_number}")
+        print(f"[INFO] Extracted Order ID: {order_id}")
+        
+        # Lookup order in Excel
+        order_data = None
+        status_found = False
+        
+        if mobile_number and order_id:
+            order_data = find_order(mobile_number, order_id)
+            if order_data:
+                status_found = True
+                print(f"[OK] Order found: {order_data.get('order_status', 'Unknown')}")
+            else:
+                print(f"[WARNING] Order not found in Excel")
+        
+        # Generate response messages
         if not mobile_number and not order_id:
-            return {
-                "match": False,
-                "mobile": None,
-                "order_id": None,
-                "status": None,
-                "message": "I could not find a mobile number or order ID in your message."
-            }
-        
-        # If only one found, return helpful message
-        if not mobile_number:
-            return {
-                "match": False,
-                "mobile": None,
-                "order_id": order_id,
-                "status": None,
-                "message": "I found an order ID but could not find a mobile number. Please provide both mobile number and order ID."
-            }
-        
-        if not order_id:
-            return {
-                "match": False,
-                "mobile": mobile_number,
-                "order_id": None,
-                "status": None,
-                "message": "I found a mobile number but could not find an order ID. Please provide both mobile number and order ID."
-            }
-        
-        # Both found - search in Excel
-        order = find_order(mobile_number, order_id)
-        
-        if order:
-            return {
-                "match": True,
-                "mobile": mobile_number,
-                "order_id": order_id,
-                "status": order["order_status"],
-                "message": f"Order found. Status is {order['order_status']}."
-            }
+            response_text = "I could not find a mobile number or order ID in your message. Please provide both your mobile number and order ID to check the status."
+        elif not mobile_number:
+            response_text = f"I found order ID {order_id}, but I need your mobile number as well to check the order status. Please provide your 10-digit mobile number."
+        elif not order_id:
+            response_text = f"I found mobile number {mobile_number}, but I need your order ID as well to check the order status. Please provide your order ID."
+        elif order_data:
+            customer_name = order_data.get("customer_name", "")
+            status = order_data.get("order_status", "Unknown")
+            delivery_date = order_data.get("delivery_date", "")
+            response_text = f"Hello {customer_name if customer_name else 'there'}, your order {order_id} is currently {status}."
+            if delivery_date:
+                response_text += f" Expected delivery date is {delivery_date}."
         else:
-            return {
-                "match": False,
-                "mobile": mobile_number,
-                "order_id": order_id,
-                "status": None,
-                "message": "Mobile or Order ID not found in records."
-            }
+            response_text = f"I could not find order {order_id} for mobile number {mobile_number} in our records. Please verify your mobile number and order ID are correct."
+        
+        # Determine intent and topic
+        intent = "order_status" if (mobile_number and order_id) else "general_query"
+        # Topic should be set to last_update from Excel, or default if not found
+        topic = str(order_data.get("last_update", "")) if order_data and order_data.get("last_update") else ("Order Status Inquiry" if intent == "order_status" else "General Query")
+        
+        # Build result in backend format
+        result = {
+            "transcript": text,
+            "mobile_number": mobile_number,
+            "order_id": order_id,
+            "customer_name": order_data.get("customer_name") if order_data else None,
+            "topic": topic,
+            "intent": intent,
+            "status_found": status_found,
+            "order_status": {
+                "status": order_data.get("order_status", "") if order_data else "",
+                "delivery_date": str(order_data.get("delivery_date", "")) if order_data else "",
+                "last_update": str(order_data.get("last_update", "")) if order_data else ""
+            },
+            "response_text": response_text,
+            "response_voice_text": response_text
+        }
+        
+        return result
+    
+    def orderStatusChecker(self, text: str) -> Dict[str, Any]:
+        """Legacy method - calls process() for backward compatibility"""
+        return self.process(text)
 
 # MCP Server instance
 mcp_server = OrderMCPServer()
 
 def handle_mcp_request(text: str) -> Dict[str, Any]:
     """Handle MCP request - entry point for external calls"""
-    return mcp_server.orderStatusChecker(text)
+    return mcp_server.process(text)
 
 if __name__ == "__main__":
     # Handle command line input

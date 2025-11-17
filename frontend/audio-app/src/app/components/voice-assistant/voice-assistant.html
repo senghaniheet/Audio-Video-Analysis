@@ -1,0 +1,189 @@
+<div class="voice-assistant-container">
+    <!-- Header -->
+    <div class="header">
+        <div class="header-content">
+            <div class="header-left" style="position: relative; display: flex; align-items: center;">
+                <div class="pulse-icon">
+                    <!-- Circle -->
+                    <svg class="circle" width="48" height="48" viewBox="0 0 48 48">
+                        <circle cx="24" cy="24" r="20" fill="#6366f1" />
+                    </svg>
+
+                    <!-- Mic Icon -->
+                    <svg class="mic" width="24" height="24" viewBox="0 0 24 24" fill="#fff">
+                        <path
+                            d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 14 0h-2zm-5 8a7 7 0 0 0 7-7h-2a5 5 0 0 1-10 0H5a7 7 0 0 0 7 7v3h2v-3z" />
+                    </svg>
+
+                    <div class="pulse-ring"></div>
+                </div>
+
+                <div class="header-text" style="margin-left: 15px;">
+                    <h1>Avanta Grade Voice Assistance</h1>
+                    <p>Always here to help</p>
+                </div>
+            </div>
+
+
+            <button class="history-button" (click)="toggleHistory()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span>History</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- History Sidebar -->
+    <div class="history-overlay" *ngIf="showHistory" (click)="showHistory = false"></div>
+    <div class="history-sidebar" [class.show]="showHistory">
+        <div class="history-header">
+            <h2>Chat History</h2>
+            <button class="close-button" (click)="showHistory = false">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            </button>
+        </div>
+        <div class="history-content">
+            <div *ngIf="messages.length === 0" class="no-history">
+                <p>No history yet</p>
+            </div>
+            <div *ngIf="messages.length > 0" class="history-messages">
+                <ng-container *ngFor="let msg of messages; let i = index">
+                    <div *ngIf="shouldShowDate(i)" class="date-divider">
+
+                        {{ formatDate(msg.timestamp) }}
+                    </div>
+                    <div class="history-message" [class.user-history]="msg.type === 'user'"
+                        [class.assistant-history]="msg.type === 'assistant'">
+                        <div class="history-message-header">
+                            <span class="history-message-sender">{{ msg.type === 'user' ? 'You' : 'Assistant' }}</span>
+                            <span class="history-message-time">{{ formatTime(msg.timestamp) }}</span>
+                        </div>
+                        <p class="history-message-text">{{ msg.text }}</p>
+                    </div>
+                </ng-container>
+            </div>
+        </div>
+        <div class="history-footer">
+            <button class="clear-history-button" (click)="clearHistory()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+
+                Clear All History
+            </button>
+        </div>
+    </div>
+
+    <!-- Messages Container -->
+    <div class="messages-container" #messagesContainer>
+        <div *ngIf="messages.length === 0 && !isLoading" class="welcome-message">
+            <p class="welcome-title">👋 Hello! I'm Avanta Grade Voice Assistance.</p>
+            <p class="welcome-subtitle">Click "Start" to record or upload an audio file.</p>
+        </div>
+
+        <!-- Processing Indicator for Upload -->
+        <div *ngIf="isLoading && messages.length === 0" class="processing-container">
+            <div class="processing-card">
+                <div class="spinner"></div>
+                <span class="processing-text">Processing audio...</span>
+            </div>
+        </div>
+        <!-- Messages -->
+        <div *ngFor="let message of messages" class="message" [class.user-message]="message.type === 'user'"
+            [class.assistant-message]="message.type === 'assistant'">
+            <div class="message-bubble">
+                <p class="message-text">{{ message.text }}</p>
+                <!-- Play Audio Button -->
+                <button *ngIf="message.audioUrl" class="play-button" (click)="playAudio(message.audioUrl, message.id)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <ng-container *ngIf="!(isPlaying && currentPlayingId === message.id)">
+                            <polygon points="5 3 19 12 5 21 5 3" />
+                        </ng-container>
+                        <ng-container *ngIf="isPlaying && currentPlayingId === message.id">
+                            <rect x="6" y="4" width="4" height="16" />
+                            <rect x="14" y="4" width="4" height="16" />
+                        </ng-container>
+                    </svg>
+                    <span>{{ isPlaying && currentPlayingId === message.id ? 'Playing...' : 'Play Voice' }}</span>
+                </button>
+                <!-- Play TTS Button -->
+                <button *ngIf="message.hasAudio && !message.audioUrl" class="play-button"
+                    (click)="speakText(message.text, message.id)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <ng-container *ngIf="!(isPlaying && currentPlayingId === message.id)">
+                            <polygon points="5 3 19 12 5 21 5 3" />
+                        </ng-container>
+                        <ng-container *ngIf="isPlaying && currentPlayingId === message.id">
+                            <rect x="6" y="4" width="4" height="16" />
+                            <rect x="14" y="4" width="4" height="16" />
+                        </ng-container>
+                    </svg>
+                    <span>{{ isPlaying && currentPlayingId === message.id ? 'Playing...' : 'Play Voice' }}</span>
+                </button>
+                <span class="timestamp">{{ formatTime(message.timestamp) }}</span>
+            </div>
+        </div>
+        <!-- WhatsApp Style Loading Animation -->
+        <div *ngIf="isProcessing" class="message assistant-message">
+            <div class="message-bubble loading-bubble">
+                <div class="typing-indicator">
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recording Indicator -->
+    <div *ngIf="isRecording" class="recording-indicator">
+        <div class="recording-pulse"></div>
+        <span class="recording-text">Recording... {{ recordingDuration }}s</span>
+    </div>
+
+    <!-- Ready to Send Indicator -->
+    <div *ngIf="recordedAudio && !isRecording && !isLoading" class="ready-indicator">
+        <div class="ready-dot"></div>
+        <span class="ready-text">Audio ready to send!</span>
+    </div>
+
+    <!-- Input Controls -->
+    <div class="input-container">
+        <div class="input-controls">
+            <!-- Upload Button -->
+            <label class="upload-button" [class.disabled]="isRecording || isLoading">
+                <input #fileInput type="file" accept="audio/*" (change)="onFileUpload($event)"
+                    [disabled]="isRecording || isLoading">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+            </label>
+
+            <!-- Start/Stop Recording Button -->
+            <button class="record-button" [class.recording]="isRecording" [disabled]="isLoading"
+                (click)="toggleRecording()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <circle *ngIf="!isRecording" cx="12" cy="12" r="8" />
+                    <rect *ngIf="isRecording" x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
+                <span>{{ isRecording ? 'Stop' : 'Start' }}</span>
+            </button>
+
+            <!-- Send Button -->
+            <button class="send-button" [disabled]="!recordedAudio || isLoading" (click)="sendMessage()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+            </button>
+        </div>
+    </div>
+</div>

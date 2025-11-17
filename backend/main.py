@@ -6,9 +6,14 @@ import uvicorn
 import tempfile
 import os
 import uuid
-from datetime import datetime, timedelta
 from services.whisper_service import WhisperService
-from services.mcp_server import MCPServer
+import sys
+
+# Add mcp-order-status/server to path to import MCP server
+# mcp_server_path = os.path.join(os.path.dirname(__file__), '..', 'mcp-order-status', 'server')
+# sys.path.insert(0, mcp_server_path)
+##from order_mcp_server import handle_mcp_request
+from services.gemini_server import extract_details, format_service_boy_response
 
 app = FastAPI()
 
@@ -27,59 +32,12 @@ whisper_service = WhisperService(model_name="base")  # Using 'base' for faster s
 # Initialize OpenAI client (set your API key as environment variable)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY"))
 
-# Initialize MCP Server
-mcp_server = MCPServer(
-    excel_path="data/orders.xlsx",
-    openai_api_key=os.getenv("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
-)
+# MCP Server is now in mcp-order-status/server - will be called via handle_mcp_request
 
 
 @app.get("/")
 async def root():
     return {"message": "AI-Based Amazon Order Status Voice Assistant API"}
-
-
-async def get_order_status(order_id: str = None, mobile_number: str = None):
-    """
-    Mock order status API. Replace this with actual API call.
-    In production, this would call the real Amazon Order Status API.
-    """
-    # Mock data for demonstration
-    if order_id:
-        # Simulate API call delay
-        import asyncio
-        await asyncio.sleep(0.5)
-        
-        # Mock order status based on order ID
-        statuses = {
-            "AMZ": {"status": "Shipped", "delivery_date": (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d"), "courier": "BlueDart"},
-            "ORD": {"status": "Out for Delivery", "delivery_date": datetime.now().strftime("%Y-%m-%d"), "courier": "Amazon Logistics"},
-            "DEL": {"status": "Delivered", "delivery_date": (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"), "courier": "BlueDart"},
-        }
-        
-        # Get status based on prefix
-        prefix = order_id[:3] if len(order_id) >= 3 else "AMZ"
-        return statuses.get(prefix, {
-            "status": "Processing",
-            "delivery_date": (datetime.now() + timedelta(days=5)).strftime("%Y-%m-%d"),
-            "courier": "Amazon Logistics"
-        })
-    
-    if mobile_number:
-        # Mock lookup by mobile number
-        import asyncio
-        await asyncio.sleep(0.5)
-        return {
-            "status": "Shipped",
-            "delivery_date": (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d"),
-            "courier": "BlueDart"
-        }
-    
-    return {
-        "status": "Not Found",
-        "delivery_date": None,
-        "courier": None
-    }
 
 
 @app.post("/process-audio")
@@ -109,36 +67,32 @@ async def process_audio(file: UploadFile = File(...)):
                 "transcript": ""
             }
 
-        # Step 3: Process through MCP Server
-        print("Processing through MCP Server...")
-        mcp_result = mcp_server.process(transcription)
+        # Step 3: Process through Gemini Server (extract details and format)
+        print("Processing through Gemini Server...")
+        # Commented out MCP server code
+        # mcp_result = process_text(transcription)
         
-        # Step 4: Generate TTS Audio if response available
-        voice_text = mcp_result.get("response_voice_text", "")
-        audio_url = None
+        # Call Gemini server's extract_details method
+        extracted_data = extract_details(transcription)
+        human_readable_text = format_service_boy_response(extracted_data, transcription)
         
-        if voice_text:
-            try:
-                print("Generating TTS audio...")
-                tts_response = client.audio.speech.create(
-                    model="tts-1",
-                    voice="alloy",
-                    input=voice_text
-                )
-                
-                audio_filename = f"{uuid.uuid4().hex}.mp3"
-                audio_path = os.path.join(tempfile.gettempdir(), audio_filename)
-                
-                with open(audio_path, 'wb') as audio_file:
-                    audio_file.write(tts_response.content)
-                
-                audio_url = f"/audio/{audio_filename}"
-            except Exception as e:
-                print(f"TTS generation failed: {str(e)}")
-                audio_url = None
-
-        # Add audio_url to result
-        mcp_result["audio_url"] = audio_url
+        # Create result structure similar to MCP server response
+        mcp_result = {
+            "transcript": transcription,
+            "mobile_number": extracted_data.get("mobile_number"),
+            "order_id": extracted_data.get("order_id"),
+            "customer_name": extracted_data.get("name"),
+            "topic": "",
+            "intent": "",
+            "status_found": extracted_data.get("status_found", False),
+            "order_status": {
+                "status": extracted_data.get("order_status", ""),
+                "delivery_date": extracted_data.get("delivery_date", ""),
+                "last_update": extracted_data.get("last_update", "")
+            },
+            "response_text": human_readable_text,
+            "response_voice_text": human_readable_text
+        }
         
         return mcp_result
 
