@@ -429,6 +429,8 @@
 
 /* Recording Indicator */
 .recording-indicator {
+  width: 80%;
+  margin: 0 auto;            /* centers horizontally */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -437,6 +439,7 @@
   background: #ef4444;
   color: white;
   animation: pulse 1.5s ease-in-out infinite;
+  border-radius: 2rem;
 }
 
 .recording-pulse {

@@ -30,7 +30,7 @@ app.add_middleware(
 whisper_service = WhisperService(model_name="base")  # Using 'base' for faster startup
 
 # Initialize OpenAI client (set your API key as environment variable)
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY"))
+#client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY"))
 
 # MCP Server is now in mcp-order-status/server - will be called via handle_mcp_request
 
